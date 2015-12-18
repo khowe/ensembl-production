@@ -266,6 +266,78 @@ sub reset_empty_array_param {
 return;
 }
 
+=head2 get_Slices
+
+	Arg[1]      : String type of DB to use (defaults to core)
+	Arg[2]      : Boolean should we filter the slices if it is human
+  Example     : my $slices = $self->get_Slices('core', 1);
+  Description : Basic get_Slices() method to return all distinct slices
+                for a species but also optionally filters for the 
+                first portion of Human Y which is a non-informative region
+                (composed solely of N's). The code will only filter for 
+                GRCh38 forcing the developer to update the test for other 
+                regions. 
+  Returntype  : ArrayRef[Bio::EnsEMBL::Slice] 
+  Exceptions  : Thrown if you are filtering Human but also are not on GRCh38
+
+=cut
+sub get_Slices {
+  my ($self, $type, $filter_human) = @_;
+
+  my $dba    = $self->get_DBAdaptor($type);
+  throw "Cannot get a DB adaptor" unless $dba;
+  my $sa     = $dba->get_SliceAdaptor();
+  my @slices = @{$sa->fetch_all('toplevel', undef, 1, undef, undef)};
+  
+  if($filter_human) {
+    my $production_name = $self->production_name();
+
+    if($production_name eq 'homo_sapiens') {
+      # Coord system with highest rank should always be the one, apart from VEGA databases where it would be the second highest
+      my ($cs, $alternative_cs) = @{$dba->get_CoordSystem()->fetch_all()};
+      my $expected = 'GRCh38';
+
+      if($cs->version() ne $expected && $alternative_cs->version() ne $expected) {
+        throw sprintf(q{Cannot continue as %s's coordinate system %s is not the expected %s }, $production_name, $cs->version(), $expected);
+      }
+
+      @slices = grep {
+        if($_->seq_region_name() eq 'Y' && ($_->end() < 2781480 || $_->start() > 56887902)) {
+          $self->info('Filtering small Y slice');
+          0;
+        }
+        else {
+          1;
+        }
+     } @slices;
+    }
+  }
+  
+return [ sort { $b->length() <=> $a->length() } @slices ];
+}
+
+=head2 get_chromosome_name
+
+  Example     : my $chromosome_name = $self->get_chromosome_name();
+  Description : Basic get_chromosome_name method to return the name
+                used for the toplevel coordinate system
+                Usually chromosome, but can be group for stickleback for example
+  Returntype  : String or undef
+
+=cut
+sub get_chromosome_name {
+  my ($self) = @_;
+
+  my $dba    = $self->get_DBAdaptor('core');
+  throw "Cannot get a DB adaptor" unless $dba;
+  my $sa     = $dba->get_SliceAdaptor();
+  if (scalar(@{$sa->fetch_all_karyotype()}) == 0) { return; }
+  my $csa    = $dba->get_CoordSystemAdaptor();
+  my $cs     = $csa->fetch_by_rank(1);
+
+  return $cs->name();
+}
+
 sub cleanup_DBAdaptor {
   my ($self, $type) = @_;
   my $dba = $self->get_DBAdaptor($type);
