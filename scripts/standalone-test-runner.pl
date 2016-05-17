@@ -18,6 +18,7 @@ use strict;
 use warnings;
 use Pod::Usage;
 use Getopt::Long qw( :config no_ignore_case );
+use Log::Log4perl qw/:easy/;
 
 sub args {
   my ($self) = @_;
@@ -71,45 +72,28 @@ sub run {
   my $self = bless( {}, $class );
   $self->args();
   $self->check_opts();
+  my $o = $self->{opts};
+  Log::Log4perl->easy_init($INFO);
+  my $logger = get_logger();
   
-  my $cmd = 'java -jar '.$self->{opts}->{fat_jar};
-  $cmd .= ' -h '.$self->{opts}->{host};
-  $cmd .= ' -d '.$self->{opts}->{database};
-  $cmd .= ' -P '.$self->{opts}->{port}; 
-  $cmd .= ' -u '.$self->{opts}->{user};
-  $cmd .= ' -p '.$self->{opts}->{pass} if defined $self->{opts}->{pass};
-  $cmd .= ' --prod_dbname '.$self->{opts}->{prod_dbname} if defined $self->{opts}->{prod_dbname};
-  $cmd .= ' --prod_host '.$self->{opts}->{prod_host}; 
-  $cmd .= ' --prod_port '.$self->{opts}->{prod_port};
-  $cmd .= ' --prod_user '.$self->{opts}->{prod_user};
-  $cmd .= ' --prod_pass '.$self->{opts}->{prod_pass} if defined $self->{opts}->{prod_pass};
-  $cmd .= ' --compara_dbname '.$self->{opts}->{compara_db_name} if defined $self->{opts}->{compara_db_name};
-  $cmd .= ' -g '.$self->{opts}->{groups} if defined $self->{opts}->{groups};
-  $cmd .= ' -t '.$self->{opts}->{tests} if defined $self->{opts}->{tests};
-  $cmd .= ' -G '.$self->{opts}->{exclude_groups} if defined $self->{opts}->{exclude_groups};
-  $cmd .= ' -T '.$self->{opts}->{exclude_tests} if defined $self->{opts}->{exclude_tests};
-  $cmd .= ' -o '.$self->{opts}->{output} if defined $self->{opts}->{output};
-  $cmd .= ' -v '.$self->{opts}->{verbose} if defined $self->{opts}->{verbose};
+  my $java_cmd = qq/java -jar %s -h %s -d %s -P %d -u %s --prod_host %s --prod_port %d --prod_user %s/;
+  my $cmd = sprintf($java_cmd,$o->{fat_jar}, $o->{host}, $o->{database}, $o->{port}, $o->{user},$o->{prod_host},$o->{prod_port},$o->{prod_user});
+  $cmd .= qq/ -p $o->{pass}/ if defined $o->{pass};
+  $cmd .= qq/ --prod_dbname $o->{prod_dbname}/ if defined $o->{prod_dbname};
+  $cmd .= qq/ --prod_pass $o->{prod_pass}/ if defined $o->{prod_pass};
+  $cmd .= qq/ --compara_dbname $o->{compara_db_name}/ if defined $o->{compara_db_name};
+  $cmd .= qq/ -g $o->{groups}/ if defined $o->{groups};
+  $cmd .= qq/ -t $o->{tests}/ if defined $o->{tests};
+  $cmd .= qq/ -G $o->{exclude_groups}/ if defined $o->{exclude_groups};
+  $cmd .= qq/ -T $o->{exclude_tests}/ if defined $o->{exclude_tests};
+  $cmd .= qq/ -o $o->{output}/ if defined $o->{output};
+  $cmd .= qq/ -v $o->{verbose}/ if defined $o->{verbose};
   # If verbose is defined, run the pipeline in verbose mode
   # Else don't print anything
-  defined $self->{opts}->{verbose} ? system ($cmd) : system ($cmd.'>/dev/null 2>&1');
+  defined $o->{verbose} ? system ($cmd) : system ($cmd.'>/dev/null 2>&1');
   # Check the /healthchecks-jar-with-dependencies.jar exit code. If the exit code is sup to 0, then print issue. 
   # Else if the exit code is 0 all fine, the database has passed the viral hcs
-  $? >> 0 ? print "\nIMPORTANT: There is an issue with your database, please check $self->{opts}->{output} for more detail or re-run script with -verbose\n" : print "\nDatabase passed vital healthchecks\n"; 
-  return;
-}
-
-sub v {
-  my ( $self, $msg, @args ) = @_;
-  return unless $self->{opts}->{verbose};
-  my $s_msg = sprintf( $msg, @args );
-  my ( $sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst ) =
-    localtime( time() );
-  print sprintf(
-    "[%02d-%02d-%04d %02d:%02d:%02d] %s\n",
-    $mday, $mon, $year + 1900,
-    $hour, $min, $sec, $s_msg
-  );
+  $? >> 0 ? print qq/\nIMPORTANT: There is an issue with your database, please check $o->{output} for more detail or re-run script with -verbose\n/ : print qq/\nDatabase passed vital healthchecks\n/;
   return;
 }
 
