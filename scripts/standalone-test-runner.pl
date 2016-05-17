@@ -72,7 +72,7 @@ sub run {
   $self->args();
   $self->check_opts();
   
-  my $cmd = 'java -jar '.$self->{opts}->{fat_jar}.'/healthchecks-jar-with-dependencies.jar';
+  my $cmd = 'java -jar '.$self->{opts}->{fat_jar};
   $cmd .= ' -h '.$self->{opts}->{host};
   $cmd .= ' -d '.$self->{opts}->{database};
   $cmd .= ' -P '.$self->{opts}->{port}; 
@@ -125,7 +125,7 @@ base_standalone-test-runner.pl
 
 =head1 SYNOPSIS
 
-       perl scripts/standalone-test-runner.pl -fat_jar /homes/maurel/work/ensj-healthcheck/target \\
+       perl scripts/standalone-test-runner.pl -fat_jar /homes/maurel/work/ensj-healthcheck/target/healthchecks-jar-with-dependencies.jar \\
          -host mysql-eg-staging-1.ebi.ac.uk  -port 4160 -user ensro \\
          -database saccharomyces_cerevisiae_core_31_84_4 -prod_user ensro \\
          -prod_host mysql-eg-pan-prod.ebi.ac.uk -prod_port 4276 \\
