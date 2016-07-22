@@ -1,6 +1,7 @@
 =head1 LICENSE
 
 Copyright [1999-2015] Wellcome Trust Sanger Institute and the EMBL-European Bioinformatics Institute
+Copyright [2016] EMBL-European Bioinformatics Institute
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -41,86 +42,140 @@ use POSIX qw/strftime/;
 use Carp;
 
 sub hive_dbc {
-  my $self = shift;
-  my $dbc  = $self->dbc();
-  confess('Type error!') unless($dbc->isa('Bio::EnsEMBL::DBSQL::DBConnection'));
+    my $self = shift;
+    my $dbc  = $self->dbc();
+    confess('Type error!') unless($dbc->isa('Bio::EnsEMBL::DBSQL::DBConnection'));
 
 return $dbc;
 }
 
 sub hive_dbh {
-  my $self = shift;
-  my $dbh  = $self->hive_dbc->db_handle();
-  confess('Type error!') unless($dbh->isa('DBI::db'));
+    my $self = shift;
+    my $dbh  = $self->hive_dbc->db_handle();
+    confess('Type error!') unless($dbh->isa('DBI::db'));
 
 return $dbh;
 }
 
-sub get_DBAdaptor {
-  my ($self, $type) = @_;
-  $type ||= 'core';
-  my $species = ($type eq 'production') ? 'multi' : $self->param_required('species');
-
-return Bio::EnsEMBL::Registry->get_DBAdaptor($species, $type);
-}
-
 sub core_dba {
-  my $self = shift;
-  my $dba  = $self->get_DBAdaptor('core');
-  confess('Type error!') unless($dba->isa('Bio::EnsEMBL::DBSQL::DBAdaptor'));
+    my $self = shift;
+    my $dba  = $self->get_DBAdaptor('core');
+    confess('Type error!') unless($dba->isa('Bio::EnsEMBL::DBSQL::DBAdaptor'));
 
 return $dba;
 }
 
 sub core_dbc {
-  my $self = shift;
-  my $dbc  = $self->core_dba()->dbc();
-  confess('Type error!') unless($dbc->isa('Bio::EnsEMBL::DBSQL::DBConnection'));
+    my $self = shift;
+    my $dbc  = $self->core_dba()->dbc();
+    confess('Type error!') unless($dbc->isa('Bio::EnsEMBL::DBSQL::DBConnection'));
 
 return $dbc;
 }
 
 sub core_dbh {
-  my $self = shift;
-  my $dbh  = $self->core_dbc->db_handle();
-  confess('Type error!') unless($dbh->isa('DBI::db'));
+    my $self = shift;
+    my $dbh  = $self->core_dbc->db_handle();
+    confess('Type error!') unless($dbh->isa('DBI::db'));
 
 return $dbh;
 }
 
 sub production_dba {
-  my $self = shift;
-  my $dba  = $self->get_DBAdaptor('production');
-  if (!defined $dba) {
-    my %production_db = %{$self->param('production_db')};
-    $dba = Bio::EnsEMBL::DBSQL::DBAdaptor->new(%production_db);
-  }
-  confess('Type error!') unless($dba->isa('Bio::EnsEMBL::DBSQL::DBAdaptor'));
+    my $self = shift;
+    my $dba  = $self->get_DBAdaptor('production');
+
+    if (!defined $dba) {
+      my %production_db = %{$self->param('production_db')};
+      $dba = Bio::EnsEMBL::DBSQL::DBAdaptor->new(%production_db);
+    }
+    confess('Type error!') unless($dba->isa('Bio::EnsEMBL::DBSQL::DBAdaptor'));
 
 return $dba;
 }
 
 sub production_dbc {
-  my $self = shift;
-  my $dbc  = $self->production_dba()->dbc();
-  confess('Type error!') unless($dbc->isa('Bio::EnsEMBL::DBSQL::DBConnection'));
+    my $self = shift;
+    my $dbc  = $self->production_dba()->dbc();
+    confess('Type error!') unless($dbc->isa('Bio::EnsEMBL::DBSQL::DBConnection'));
 
 return $dbc;
 }
 
 sub production_dbh {
-  my $self = shift;
-  my $dbh  = $self->production_dba()->dbc()->db_handle();
-  confess('Type error!') unless($dbh->isa('DBI::db'));
+    my $self = shift;
+    my $dbh  = $self->production_dba()->dbc()->db_handle();
+    confess('Type error!') unless($dbh->isa('DBI::db'));
 
 return $dbh;
 }
 
-sub has_chromosomes {
-  my ($self, $dba) = @_;
+sub get_DBAdaptor {
+    my ($self, $type) = @_;
+    $type ||= 'core';
+    my $species = ($type eq 'production') ? 'multi' : $self->param_required('species');
 
-  my $helper = $dba->dbc->sql_helper();
-  my $sql = q{
+return Bio::EnsEMBL::Registry->get_DBAdaptor($species, $type);
+}
+
+# Called from 
+#  GTF, GFF3, TSV, Chainfile/DumpFile.pm  
+sub build_base_directory {
+    my ($self, @extras) = @_;
+    my @dirs = ($self->param('base_path'), $self->division());
+
+return File::Spec->catdir(@dirs);
+}
+
+sub division {
+    my ($self) = @_;
+    my $dba        = $self->get_DBAdaptor();
+    my ($division) = @{$dba->get_MetaContainer()->list_value_by_key('species.division')};
+    return if ! $division;
+    $division =~ s/^Ensembl//;
+
+return lc($division);
+}
+
+# New function to replace data_path, in TSV & ChainFile/DumpFile.pm
+sub get_data_path {
+    my ($self, $format) = @_;
+
+    $self->throw("No 'species' parameter specified")
+    unless $self->param('species');
+
+return $self->get_dir($format, $self->param('species'));
+}
+
+sub get_dir {
+    my ($self, @extras) = @_;
+    my $base_dir = $self->param('base_path');
+    my $dir      = File::Spec->catdir($base_dir, @extras);
+
+    if ($self->param('species')) {
+       my $mc       = $self->get_DBAdaptor()->get_MetaContainer();
+
+       if($mc->is_multispecies()==1){
+         my $collection_db;
+         $collection_db = $1 if($mc->dbc->dbname()=~/(.+)\_core/);
+         my $fasta_type    = pop(@extras) if($extras[0] eq 'fasta');
+         my $species       = pop(@extras);
+         push @extras, $collection_db;
+         push @extras, $species;
+         push @extras, $fasta_type if(defined $fasta_type);
+         $dir = File::Spec->catdir($base_dir, @extras);
+       }
+    }
+    mkpath($dir);
+
+return $dir;
+}
+
+sub has_chromosomes {
+    my ($self, $dba) = @_;
+    my $helper = $dba->dbc->sql_helper();
+
+    my $sql = q{
     SELECT COUNT(*) FROM
     coord_system cs INNER JOIN
     seq_region sr USING (coord_system_id) INNER JOIN
@@ -128,16 +183,69 @@ sub has_chromosomes {
     attrib_type at USING (attrib_type_id)
     WHERE cs.species_id = ?
     AND at.code = 'karyotype_rank'
-  };
-  my $count = $helper->execute_single_result(-SQL => $sql, -PARAMS => [$dba->species_id()]);
+    };
+    my $count = $helper->execute_single_result(-SQL => $sql, -PARAMS => [$dba->species_id()]);
 
-  $dba->dbc->disconnect_if_idle();
+   $dba->dbc->disconnect_if_idle();
 
 return $count;
 }
 
-###
-### 
+# Called from 
+#  TSV/DumpFile.pm  
+
+=head2 get_Slices
+
+        Arg[1]      : String type of DB to use (defaults to core)
+        Arg[2]      : Boolean should we filter the slices if it is human
+  Example     : my $slices = $self->get_Slices('core', 1);
+  Description : Basic get_Slices() method to return all distinct slices
+                for a species but also optionally filters for the 
+                first portion of Human Y which is a non-informative region
+                (composed solely of N's). The code will only filter for 
+                GRCh37 forcing the developer to update the test for other 
+                regions. 
+  Returntype  : ArrayRef[Bio::EnsEMBL::Slice] 
+  Exceptions  : Thrown if you are filtering Human but also are not on GRCh38
+
+=cut
+sub get_Slices {
+    my ($self, $type, $filter_human) = @_;
+
+    my $dba    = $self->get_DBAdaptor($type);
+    throw "Cannot get a DB adaptor" unless $dba;
+    my $sa     = $dba->get_SliceAdaptor();
+    my @slices = @{$sa->fetch_all('toplevel', undef, 1, undef, undef)};
+
+    if($filter_human) {
+       my $production_name = $self->production_name();
+
+       if($production_name eq 'homo_sapiens') {
+       # Coord system with highest rank should always be the one, apart from VEGA databases where it would be the second highest
+       my ($cs, $alternative_cs) = @{$dba->get_CoordSystem()->fetch_all()};
+       my $expected = 'GRCh37';
+
+       if($cs->version() ne $expected && $alternative_cs->version() ne $expected) {
+          throw sprintf(q{Cannot continue as %s's coordinate system %s is not the expected %s }, $production_name, $cs->version(), $expected);
+       }
+
+       @slices = grep {
+         if($_->seq_region_name() eq 'Y' && $_->end() < 2649521) {
+           $self->info('Filtering small Y slice');
+           0;
+         }
+         else {
+           1;
+         }
+      } @slices;
+    }
+   }
+
+return [ sort { $b->length() <=> $a->length() } @slices ];
+}
+
+
+#####
 
 # Takes in a key, checks if the current $self->param() was an empty array
 # and replaces it with the value from $self->param_defaults()
@@ -158,84 +266,12 @@ sub reset_empty_array_param {
 return;
 }
 
-=head2 get_Slices
-
-	Arg[1]      : String type of DB to use (defaults to core)
-	Arg[2]      : Boolean should we filter the slices if it is human
-  Example     : my $slices = $self->get_Slices('core', 1);
-  Description : Basic get_Slices() method to return all distinct slices
-                for a species but also optionally filters for the 
-                first portion of Human Y which is a non-informative region
-                (composed solely of N's). The code will only filter for 
-                GRCh37 forcing the developer to update the test for other 
-                regions. 
-  Returntype  : ArrayRef[Bio::EnsEMBL::Slice] 
-  Exceptions  : Thrown if you are filtering Human but also are not on GRCh37
-
-=cut
-sub get_Slices {
-  my ($self, $type, $filter_human) = @_;
-
-  my $dba    = $self->get_DBAdaptor($type);
-  throw "Cannot get a DB adaptor" unless $dba;
-  my $sa     = $dba->get_SliceAdaptor();
-  my @slices = @{$sa->fetch_all('toplevel', undef, 1, undef, undef)};
-  
-  if($filter_human) {
-    my $production_name = $self->production_name();
-
-    if($production_name eq 'homo_sapiens') {
-      # Coord system with highest rank should always be the one, apart from VEGA databases where it would be the second highest
-      my ($cs, $alternative_cs) = @{$dba->get_CoordSystem()->fetch_all()};
-      my $expected = 'GRCh37';
-
-      if($cs->version() ne $expected && $alternative_cs->version() ne $expected) {
-        throw sprintf(q{Cannot continue as %s's coordinate system %s is not the expected %s }, $production_name, $cs->version(), $expected);
-      }
-
-      @slices = grep {
-        if($_->seq_region_name() eq 'Y' && $_->end() < 2649521) {
-          $self->info('Filtering small Y slice');
-          0;
-        }
-        else {
-          1;
-        }
-     } @slices;
-    }
-  }
-  
-return [ sort { $b->length() <=> $a->length() } @slices ];
-}
-
 sub cleanup_DBAdaptor {
   my ($self, $type) = @_;
   my $dba = $self->get_DBAdaptor($type);
   $dba->clear_caches;
   $dba->dbc->disconnect_if_idle;
 return;
-}
-
-sub get_dir {
-  my ($self, @extras) = @_;
-
-  my $base_dir = $self->param('base_path');
-  my $dir      = File::Spec->catdir($base_dir, @extras);
-
-  if ($self->param('species')) {
-     my $mc       = $self->get_DBAdaptor()->get_MetaContainer();
-
-     if($mc->is_multispecies()==1){
-        my $collection_db = $1 if($mc->dbc->dbname()=~/(.+)\_core/);
-        my $species       = pop(@extras);
-        push @extras, $collection_db;
-        push @extras, $species; 
-        $dir = File::Spec->catdir($base_dir, @extras); 
-     }
-  }
-  mkpath($dir);
-
-return $dir;
 }
 
 sub web_name {

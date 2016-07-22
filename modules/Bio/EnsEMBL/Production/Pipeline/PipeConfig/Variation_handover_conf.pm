@@ -1,6 +1,7 @@
 =head1 LICENSE
 
 Copyright [1999-2015] Wellcome Trust Sanger Institute and the EMBL-European Bioinformatics Institute
+Copyright [2016] EMBL-European Bioinformatics Institute
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -153,9 +154,9 @@ sub beekeeper_extra_cmdline_options {
 sub resource_classes {
     my $self = shift;
     return {
-      'default' => { 'LSF' => '-R"select[myens_stag1tok>800 && myens_stag2tok>800] rusage[myens_stag1tok=10:myens_stag2tok=10:duration=10]"'},
-      'normal'  => { 'LSF' => '-q normal -M 500 -R"select[myens_stag1tok>800 && myens_stag2tok>800 && mem>500] rusage[myens_stag1tok=10:myens_stag2tok=10:duration=10, mem=500]"'},
-      'mem'     => { 'LSF' => '-q normal -M 1000 -R"select[myens_stag1tok>800 && myens_stag2tok>800 && mem>1000] rusage[myens_stag1tok=10:myens_stag2tok=10:duration=10, mem=1000]"'},
+      'default' => { 'LSF' => '-q normal'},
+      'normal'  => { 'LSF' => '-q normal -M 500 -R"select[mem>500] rusage[mem=500]"'},
+      'mem'     => { 'LSF' => '-q normal -M 1000 -R"select[mem>1000] rusage[mem=1000]"'},
     }
 }
 

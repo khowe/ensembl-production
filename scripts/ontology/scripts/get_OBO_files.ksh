@@ -1,5 +1,6 @@
 #!/bin/ksh
 # Copyright [1999-2015] Wellcome Trust Sanger Institute and the EMBL-European Bioinformatics Institute
+# Copyright [2016] EMBL-European Bioinformatics Institute
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,7 +19,10 @@
 wget -O GO.obo "http://www.geneontology.org/ontology/obo_format_1_2/gene_ontology.1_2.obo"
 
 # SO    - Sequence Ontology
-wget -O SO.obo "http://www.sequenceontology.org/resources/obo_files/current_release.obo"
+wget -O SO.obo "https://raw.githubusercontent.com/The-Sequence-Ontology/SO-Ontologies/master/so-xp-simple.obo"
+
+# HPO   - HPO Ontology
+wget -O HPO.obo "http://purl.obolibrary.org/obo/hp.obo"
 
 # EFO   - Experimental Factor Ontology
 wget -O EFO.obo "http://svn.code.sf.net/p/efo/code/trunk/src/efoinobo/efo.obo"

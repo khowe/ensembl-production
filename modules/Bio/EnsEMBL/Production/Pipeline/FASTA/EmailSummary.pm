@@ -1,6 +1,7 @@
 =head1 LICENSE
 
 Copyright [1999-2015] Wellcome Trust Sanger Institute and the EMBL-European Bioinformatics Institute
+Copyright [2016] EMBL-European Bioinformatics Institute
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -35,7 +36,6 @@ sub fetch_input {
   my $blast_gene = $self->jobs('BlastGeneIndex');
   my $blast_pep = $self->jobs('BlastPepIndex');
   my $blat = $self->jobs('BlatDNAIndex', 100);
-  my $blat_sm = $self->jobs('BlatSmDNAIndex', 100);
     
   my @args = (
     $dump_dna->{successful_jobs},
@@ -52,8 +52,6 @@ sub fetch_input {
     $blast_pep->{failed_jobs},
     $blat->{successful_jobs},
     $blat->{failed_jobs},
-    $blat_sm->{successful_jobs},
-    $blat_sm->{failed_jobs},
     $self->failed(),
     $self->summary($dump_dna),
     $self->summary($copy_dna),
@@ -62,7 +60,6 @@ sub fetch_input {
     $self->summary($blast_gene),
     $self->summary($blast_pep),
     $self->summary($blat),
-    $self->summary($blat_sm),
   );
   
   my $msg = sprintf(<<'MSG', @args);
@@ -75,7 +72,6 @@ Your FASTA Pipeline has finished. We have:
   * %d species with BLAST GENE indexes generated (%d failed)
   * %d species with BLAST PEPTIDE indexes generated (%d failed)
   * %d species with BLAT DNA generated (%d failed)
-  * %d species with BLAT soft-masked DNA generated (%d failed)
 
 %s
 
@@ -97,7 +93,6 @@ Full breakdown follows ...
 
 %s
 
-%s
 
 MSG
   $self->param('text', $msg);

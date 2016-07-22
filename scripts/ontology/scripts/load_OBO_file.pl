@@ -1,5 +1,6 @@
 #!/usr/bin/env perl
 # Copyright [1999-2015] Wellcome Trust Sanger Institute and the EMBL-European Bioinformatics Institute
+# Copyright [2016] EMBL-European Bioinformatics Institute
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,9 +17,6 @@
 
 use strict;
 use warnings;
-#TODO Do we need this?
-use FindBin;
-use lib "$FindBin::Bin/../../../../ONTO-PERL-1.31/lib";
 
 use DBI qw( :sql_types );
 use Getopt::Long qw( :config no_ignore_case );
@@ -60,11 +58,11 @@ USAGE
 #-----------------------------------------------------------------------
 
 sub write_ontology {
-  my ($dbh, $namespaces) = @_;
+  my ($dbh, $namespaces, $data_version) = @_;
 
   print("Writing to 'ontology' table...\n");
 
-  my $statement = "INSERT INTO ontology (name, namespace) VALUES (?,?)";
+  my $statement = "INSERT INTO ontology (name, namespace, data_version) VALUES (?,?,?)";
 
   my $sth = $dbh->prepare($statement);
 
@@ -82,6 +80,7 @@ sub write_ontology {
 
     $sth->bind_param(1, $ontology,  SQL_VARCHAR);
     $sth->bind_param(2, $namespace, SQL_VARCHAR);
+    $sth->bind_param(3, $data_version, SQL_VARCHAR);
 
     $sth->execute();
 
@@ -141,6 +140,7 @@ sub write_subset {
 
   foreach my $subset_name (sort(keys(%{$subsets}))) {
     my $subset = $subsets->{$subset_name};
+    $subset->{'name'} =~ s/:/_/g;
 
     if (!(defined($subset->{'name'}) && defined($subset->{'definition'}))) {
       print "Null value encountered: subset name " . $subset->{'name'} . " subset definition " . $subset->{'definition'} . "\n";
@@ -186,7 +186,7 @@ sub write_term {
 
   my $statement = "INSERT IGNORE INTO term (ontology_id, subsets, accession, name, definition, is_root, is_obsolete) VALUES (?,?,?,?,?,?,?)";
 
-  my $syn_stmt = "INSERT INTO synonym (term_id, name, type) VALUES (?,?,?)";
+  my $syn_stmt = "INSERT INTO synonym (term_id, name, type, dbxref) VALUES (?,?,?,?)";
 
   my $alt_stmt = "INSERT INTO alt_id (term_id, accession) VALUES (?,?)";
 
@@ -218,6 +218,7 @@ sub write_term {
 
     if (exists($term->{'subsets'})) {
       $term_subsets = join(',', map { $subsets->{$_}{'name'} } @{$term->{'subsets'}});
+      $term_subsets =~ s/:/_/g;
     }
 
     if (!defined($term->{'name'})) {
@@ -295,9 +296,14 @@ sub write_term {
         }
         else {
           foreach my $syn (@{$term->{'synonyms'}}) {
+            my $def_as_string = $syn->def_as_string();
+            my $desc = (split/\"/, $def_as_string)[1];
+            my $dbxref = (split/\[|\]/, $def_as_string)[1];
+
             $syn_sth->bind_param(1, $term->{id},  SQL_INTEGER);
-            $syn_sth->bind_param(2, $syn->def_as_string(), SQL_VARCHAR);
+            $syn_sth->bind_param(2, $desc, SQL_VARCHAR);
 	    $syn_sth->bind_param(3, $syn->scope());
+            $syn_sth->bind_param(4, $dbxref, SQL_VARCHAR);
 
             $syn_sth->execute();
     
@@ -759,7 +765,8 @@ foreach my $rel_type (@{$ontology->get_relationship_types()}) {
 
 print("Finished reading OBO file, now writing to database...\n");
 
-my $unknown_onto_id = write_ontology($dbh, \%namespaces);
+
+my $unknown_onto_id = write_ontology($dbh, \%namespaces, $ontology->data_version() );
 write_subset($dbh, \%subsets);
 write_term($dbh, \%terms, \%subsets, \%namespaces, $unknown_onto_id);
 write_relation_type($dbh, \%relation_types);

@@ -1,6 +1,7 @@
 =head1 LICENSE
 
 Copyright [1999-2015] Wellcome Trust Sanger Institute and the EMBL-European Bioinformatics Institute
+Copyright [2016] EMBL-European Bioinformatics Institute
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -76,7 +77,15 @@ sub param_defaults {
 
 sub fetch_input {
   my ($self) = @_;
-  
+ 
+  my $eg = $self->param('eg');
+  $self->param('eg', $eg);
+
+  if($eg){
+     my $base_path  = $self->build_base_directory();
+     $self->param('base_path', $base_path);
+  } 
+
   my $type = $self->param('type');
   throw "No type specified" unless $type;
   throw "Unsupported type '$type' specified" unless $self->param('supported_types')->{$type};

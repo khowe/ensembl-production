@@ -39,7 +39,7 @@ sub fetch_input {
   $self->param('eg', $eg);
 
   if($eg){
-     my $base_path = $self->param('sub_dir');
+     my $base_path  = $self->build_base_directory();
      $self->param('base_path', $base_path);
 
      my $release = $self->param('eg_version');
@@ -103,14 +103,15 @@ sub run {
   my $tmp_alt_out_file = $alt_out_file . "_tmp";
 
   my (@chroms, @scaff, @alt);
+  my $chromosome_name = $self->get_chromosome_name();
 
   foreach my $slice (@$slices) {
     if ($slice->is_reference) {
       if ($slice->is_chromosome) {
         if ($per_chromosome) {
-          my $slice_name = '.chromosome.' . $slice->seq_region_name;
+          my $slice_name = $chromosome_name . "." . $slice->seq_region_name;
           my $chr_file = $out_file;
-          $chr_file =~ s/\.gff3/$slice_name\.gff3/;
+          $chr_file =~ s/\.gff3/\.$slice_name\.gff3/;
           $self->print_to_file([$slice], $chr_file, $feature_types, \%adaptors, 1);
           push @$out_files, $chr_file;
         }
@@ -172,6 +173,7 @@ sub run {
 
 sub print_to_file {
   my ($self, $slices, $file, $feature_types, $adaptors, $include_header) = @_;
+
   my $dba = $self->core_dba;
   my $include_scaffold = $self->param_required('include_scaffold');
   my $logic_names = $self->param_required('logic_name');

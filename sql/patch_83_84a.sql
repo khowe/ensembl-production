@@ -1,4 +1,5 @@
 -- Copyright [1999-2015] Wellcome Trust Sanger Institute and the EMBL-European Bioinformatics Institute
+-- Copyright [2016] EMBL-European Bioinformatics Institute
 -- 
 -- Licensed under the Apache License, Version 2.0 (the "License");
 -- you may not use this file except in compliance with the License.
@@ -12,17 +13,15 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
-# Table structure for projection info database
+# patch_83_84_a.sql
+#
+# Title: Update schema version.
+#
+# Description:
+#   Update schema_version in meta table to 84.
 
-CREATE TABLE projections (
+UPDATE meta SET meta_value='84' WHERE meta_key='schema_version';
 
-  db_release					INT NOT null,
-  timestamp					DATETIME,
-  from_db					VARCHAR(255),
-  from_species_latin				VARCHAR(255),
-  from_species_common				VARCHAR(255),
-  to_db					        VARCHAR(255),
-  to_species_latin				VARCHAR(255),
-  to_species_common				VARCHAR(255)
-  
-);
+# Patch identifier
+INSERT INTO meta (species_id, meta_key, meta_value)
+  VALUES (NULL, 'patch', 'patch_83_84_a.sql|schema_version');

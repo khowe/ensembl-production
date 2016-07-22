@@ -1,6 +1,7 @@
 =head1 LICENSE
 
 Copyright [1999-2015] Wellcome Trust Sanger Institute and the EMBL-European Bioinformatics Institute
+Copyright [2016] EMBL-European Bioinformatics Institute
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -133,10 +134,27 @@ sub param_defaults {
 
 sub fetch_input {
   my ($self) = @_;
-  
+ 
+  my $eg = $self->param('eg');
+  $self->param('eg', $eg);
+
+  if($eg){
+     my $base_path  = $self->build_base_directory();
+     $self->param('base_path', $base_path);
+     
+     my $release = $self->param('eg_version');
+     $self->param('release', $release);
+  }
+ 
   my %sequence_types = map { $_ => 1 } @{ $self->param('sequence_type_list') };
+  # Skip dna dumps if 
+  # 'check_intentions' flag is 1
+  # AND 'requires_new_dna' is 0
+  if($self->param('check_intentions')==1 && $self->param('requires_new_dna')==0){ 
+     delete $sequence_types{'dna'};
+  }
   $self->param('sequence_types', \%sequence_types);
-  
+ 
   my $dba = $self->get_DBAdaptor();
   my $analyses = $dba->get_MetaContainer()->list_value_by_key('repeat.analysis');
   $self->param('analyses', $analyses);
@@ -172,6 +190,11 @@ sub run {
 sub write_output {
   my ($self) = @_;
   my $dataflows = $self->param('dataflows');
+
+  # If no jobs created for the output channel 1, hive will invoke autoflow by default. 
+  # This will mess up the pipeline and must be turn off
+  $self->input_job->autoflow(0);
+
   foreach my $flow (@{$dataflows}) {
     $self->dataflow_output_id(@{$flow});
   }
@@ -194,7 +217,7 @@ sub run_type {
     $self->_dump_dna($type);
     $self->_create_README('dna');
   }
-  
+
   if ( $sequence_types->{cdna} ) { #includes peptides whether you like it or not
     $self->info( "Starting cdna dump for " . $species );
     my ($transcripts, $peptide) = $self->_dump_transcripts('cdna', $type);
@@ -271,13 +294,14 @@ sub _dump_dna {
 
   ############ CHROMOSOME WORK 
   $self->info('Processing %d chromosome(s)', scalar(@chromosomes));
+  my $chromosome_name = $self->get_chromosome_name();
   foreach my $s (@chromosomes) {
     my ( $chromo_file_name, $chromo_fh, $chromo_serializer ) =
-      $self->_generate_fasta_serializer( 'dna', 'chromosome',
+      $self->_generate_fasta_serializer( 'dna', $chromosome_name,
       $s->seq_region_name(), undef);
     # repeat masked data too
     my ( $rm_chromo_file_name, $rm_chromo_fh, $rm_chromo_serializer ) =
-      $self->_generate_fasta_serializer( 'dna_sm', 'chromosome',
+      $self->_generate_fasta_serializer( 'dna_sm', $chromosome_name,
       $s->seq_region_name(), undef);
     
     $self->_dump_slice($s, $chromo_serializer, $rm_chromo_serializer);
@@ -371,10 +395,16 @@ sub _dump_transcripts {
     ( $cds_filename, $cds_fh, $cds_serializer ) =
       $self->_generate_fasta_serializer( 'cds', 'all' );
   }
-
+  
   # work out what biotypes correspond to $transcript_type
-  my $biotype_manager = 
-    $self->get_DBAdaptor('production')->get_biotype_manager();
+  my $pdba = $self->get_DBAdaptor('production');
+
+  unless(defined $pdba){
+    my %prod_db = %{$self->param_required('prod_db')};
+    $pdba       = Bio::EnsEMBL::Production::DBSQL::DBAdaptor->new(%prod_db);
+  }
+
+  my $biotype_manager = $pdba->get_biotype_manager();
   my $biotypes_list;
 
   my @biotype_groups;
@@ -387,7 +417,7 @@ sub _dump_transcripts {
   # list
   #
   if ($transcript_type eq 'cdna') { push @biotype_groups, 'coding', 'pseudogene'; } 
-  elsif ($transcript_type eq 'ncrna') { push @biotype_groups, 'snoncoding', 'lnoncoding'; }
+  elsif ($transcript_type eq 'ncrna') { push @biotype_groups, 'snoncoding', 'lnoncoding', 'mnoncoding'; }
   else { throw "Invalid transcript type: $transcript_type"; }
   
   map { push @{$biotypes_list}, @{ $biotype_manager->group_members($_)} } 
@@ -415,7 +445,7 @@ sub _dump_transcripts {
           my $translation = $transcript->translation();
           if ($translation) {
             my $translation_seq = $transcript->translate();
-            $self->_create_display_id($translation, $translation_seq, $transcript_type);
+            $self->_create_display_id($translation, $translation_seq, 'pep');
             $peptide_serializer->print_Seq($translation_seq);
             my $cds_seq = Bio::Seq->new(-seq => $transcript->translateable_seq(), moltype => 'dna', alphabet => 'dna', id => $transcript->display_id());
             $self->_create_display_id($transcript, $cds_seq, 'cds');
@@ -630,13 +660,15 @@ sub _create_display_id {
     }
     #Must be a real "transcript"
     else {
-      $stable_id = $object->stable_id() . "." . $object->version();
+      $stable_id = $object->stable_id_version();
       $location  = $object->feature_Slice()->name();
       my $gene = $object->get_Gene();
-      $attributes{gene} = $gene->stable_id() . "." . $gene->version();
+      $attributes{gene} = $gene->stable_id_version();
       $attributes{gene_biotype} = $gene->biotype();
+      $attributes{gene_symbol} = $gene->display_xref->display_id if $gene->display_xref;
+      $attributes{description} = $gene->description if $gene->description;
       
-      $decoded_type = lc($object->analysis()->logic_name());
+      $decoded_type = $type;
       $decoded_status = lc($object->status()) if $object->status();
     }
   }
@@ -644,16 +676,18 @@ sub _create_display_id {
   elsif(check_ref($object, 'Bio::EnsEMBL::Translation')) {
     my $transcript = $object->transcript();
     my $gene = $transcript->get_Gene();
-    $stable_id = $object->stable_id() . "." . $object->version();
+    $stable_id = $object->stable_id_version();
     $location  = $transcript->feature_Slice()->name();
     %attributes = (
-      gene => $gene->stable_id() . "." . $gene->version(),
+      gene => $gene->stable_id_version(),
       gene_biotype => $gene->biotype(),
-      transcript => $transcript->stable_id() . "." . $transcript->version(),
-      transcript_biotype => $transcript->biotype()
+      transcript => $transcript->stable_id_version(),
+      transcript_biotype => $transcript->biotype(),
     );
-    $decoded_type = 'pep';
+    $decoded_type = $type;
     $decoded_status = lc($transcript->status()) if $transcript->status();
+    $attributes{gene_symbol} = $gene->display_xref->display_id if $gene->display_xref;
+    $attributes{description} = $gene->description if $gene->description;
   }
   else {
     throw sprintf( 'Do not understand how to format a display_id for type "%s"',
@@ -663,7 +697,7 @@ sub _create_display_id {
   my $attr_str = join(q{ }, 
     map { $_.':'.$attributes{$_} } 
     grep { exists $attributes{$_} } 
-    qw/gene transcript gene_biotype transcript_biotype/);
+    qw/gene transcript gene_biotype transcript_biotype gene_symbol description/);
 
   my $format = '%s %s:%s %s %s';
   
@@ -1084,8 +1118,8 @@ http://www.ebi.ac.uk/biomart/ for more information.
 README
 
   my ( $self, $data_type ) = @_;
-  my $base_path = $self->fasta_path();
-  my $path      = File::Spec->catfile( $base_path, $data_type, 'README' );
+  my $base_path = $self->fasta_path($data_type);
+  my $path      = File::Spec->catfile( $base_path, 'README' );
   my $accession = $self->assembly_accession();
   my $txt       = $text{$data_type};
   throw "Cannot find README text for type $data_type" unless $txt;

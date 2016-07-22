@@ -1,6 +1,7 @@
 =head1 LICENSE
 
 Copyright [1999-2015] Wellcome Trust Sanger Institute and the EMBL-European Bioinformatics Institute
+Copyright [2016] EMBL-European Bioinformatics Institute
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -79,7 +80,19 @@ sub fetch_input {
   foreach my $key (qw/data_type species release base_path/) {
     $self->throw("Cannot find the required parameter $key") unless $self->param($key);
   }
-  return;
+
+  my $eg = $self->param('eg');
+  $self->param('eg', $eg);
+
+  if($eg){
+     my $base_path  = $self->build_base_directory();
+     $self->param('base_path', $base_path);
+
+     my $release = $self->param('eg_version');
+     $self->param('release', $release);
+  }
+  
+return;
 }
 
 # sticks ends of files together into one big file.
@@ -138,14 +151,55 @@ sub get_dna_files {
   my $data_type = $self->param('data_type'); 
   
   my $regex = $self->file_pattern($data_type);
+
   my $filter = sub {
     my ($filename) = @_;
     return ($filename =~ $regex && $filename !~ /\.toplevel\./) ? 1 : 0;
   };
   my $files = $self->find_files($path, $filter);
-  return [ sort @{$files} ];
+
+  # Sort files by the default lexical manner then try
+  # to sort by karyotype if possible
+  my @sorted = $self->karyotype_sort(sort @{$files});
+  return \@sorted;
 }
 
+# Sort the chromosome files based on karyotype, if
+# karyotype is available for this species
+
+sub karyotype_sort {
+  my $self = shift;
+  my @files = @_;
+
+  # If we don't have a species don't bother trying to sort the files
+  return @files unless($self->param('species'));
+
+  my $sp = $self->param('species');
+  my $sa = Bio::EnsEMBL::Registry->get_adaptor($sp, 'core', 'slice');
+
+  # If we can't get an adaptor, don't bother trying to sort the files
+  return @files if(!$sa);
+
+  # If we don't get any slices, this species probably doesn't have
+  # karyotypes, so don't bother trying to sort it
+  my $slices = $sa->fetch_all_karyotype();
+  return @files unless($slices);
+
+  # We have karyotypes, let's try sorting
+  my $i = 0;
+  my %order = map { $_->seq_region_name => ++$i } @{$slices};
+
+  my $lookup_order = sub {
+      my ($filename) = @_;
+      my ($id) = $filename =~ /.+\.(\w+)\.fa\.gz/;
+      # We want any leftover chromosomes not found in the karyotype plunked 
+      # at the end, so give it a really high rank
+      return $order{$id} || 999;
+  };
+
+  return sort { $lookup_order->($a) <=> $lookup_order->($b) } @files;
+
+}
 
 sub target_file {
   my ($self) = @_;
