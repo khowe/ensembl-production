@@ -295,14 +295,14 @@ sub get_Slices {
     if($production_name eq 'homo_sapiens') {
       # Coord system with highest rank should always be the one, apart from VEGA databases where it would be the second highest
       my ($cs, $alternative_cs) = @{$dba->get_CoordSystem()->fetch_all()};
-      my $expected = 'GRCh38';
+      my $expected = 'GRCh37';
 
       if($cs->version() ne $expected && $alternative_cs->version() ne $expected) {
         throw sprintf(q{Cannot continue as %s's coordinate system %s is not the expected %s }, $production_name, $cs->version(), $expected);
       }
 
       @slices = grep {
-        if($_->seq_region_name() eq 'Y' && ($_->end() < 2781480 || $_->start() > 56887902)) {
+        if($_->seq_region_name() eq 'Y' && ($_->end() < 2649521) {
           $self->info('Filtering small Y slice');
           0;
         }
